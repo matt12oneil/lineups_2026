@@ -1,10 +1,17 @@
+if (!requireNamespace('devtools', quietly = TRUE)){
+  install.packages('devtools')
+}
+devtools::install_github(repo = "BillPetti/baseballr")
+
 library(tidyverse)
-library(dplyr)
-library(tidytable)
 library(janitor)
+library(baseballr)
+library(furrr)
 library(stringi)
-library(scales)
+library(gt)
+library(gtExtras)
 library(DT)
+library(scales)
 
 #switch to use position, not just batter rank for hitters
 #display points in final table
@@ -124,7 +131,7 @@ proj <- batter_proj |>
   filter(points > 100) |>
   dplyr::inner_join(ud_adp, by = join_by(playername == full_name), relationship = "many-to-many") |>
   rename(position = slot_name) |>
-  group_by(name, player_id, team, adp, position, team) |>
+  group_by(name, player_id, team, adp, position) |>
   summarize(points = round(max(points))) |>
   ungroup() |>
   group_by(position) |>

@@ -1,6 +1,17 @@
+if (!requireNamespace('devtools', quietly = TRUE)){
+  install.packages('devtools')
+}
+devtools::install_github(repo = "BillPetti/baseballr")
+
 library(tidyverse)
 library(janitor)
 library(baseballr)
+library(furrr)
+library(stringi)
+library(gt)
+library(gtExtras)
+library(DT)
+library(scale)
 
 #all previous year stats
 #set up via Github Actions
@@ -8,68 +19,28 @@ library(baseballr)
 #save png files to computer
 #see if we can get final adp and my own exposure
 #try to calculate total points by team YTD and see if we can get advance rates by player
+#VORP by usable scores?
 
-days <- mlb_schedule(season = 2025, level_ids = '1') |>
-  filter(series_description == 'Regular Season' & date <= '2025-09-14' & date >='2025-03-31') |>
-  distinct(date) |>
-  mutate(date = as.Date(date)) |>
-  head(10)
-
-weeks <- c('2025-03-31'
-           ,'2025-04-07'
-           ,'2025-04-14'
-           , '2025-04-21'
-           ,'2025-04-28'
-           ,'2025-05-05'
-           ,'2025-05-12'
-           ,'2025-05-19'
-           ,'2025-05-26'
-           ,'2025-06-02'
-           ,'2025-06-09'
-           ,'2025-06-16'
-           ,'2025-06-23'
-           ,'2025-06-30'
-           ,'2025-07-07'
-           ,'2025-07-14'
-           ,'2025-07-21'
-           ,'2025-07-28'
-           ,'2025-08-04'
-           ,'2025-08-11'
-           ,'2025-08-18'
-           ,'2025-08-25'
-           ,'2025-09-01'
-           ,'2025-09-08'
-           )
-
-weeks <- as.Date(weeks)
+draft_data <- read_csv('https://storage.googleapis.com/underdog-inc/underblog/2025_Dinger/the_dinger_rd1.csv') |>
+  mutate(position_name = case_when(position_name %in% c('SP','RP') ~ 'P'
+                                   , position_name %in% c('DH','LF','RF','CF') ~ 'OF'
+                                   , .default = 'IF')) |>
+  arrange(draft_created_time) |>
+  group_by(player_id) |>
+  mutate(final_adp = last(projection_adp)) |>
+  distinct(player_name, position_name, final_adp) |>
+  arrange(final_adp) |>
+  mutate(player_name = stri_trans_general(str = player_name, 
+                                        id = "Latin-ASCII"))
 
 
-batter_rollup <- function(week_start){
-  week_end = week_start + 6
-  week_stats <- bref_daily_batter(week_start, week_end) |>
-    mutate(week = week_start)
-  return(week_stats)
-}
+fg_id <- read_csv('https://www.smartfantasybaseball.com/PLAYERIDMAPCSV') |>
+  clean_names() |>
+  filter(pos == 'P' & active == 'Y') |>
+  select(idfangraphs)
 
-#need to add UD positions to be able to rank over
 
-weekly_batter <- future_map_dfr(
-  .x = weeks
-  ,.f = batter_rollup
-)
-
-fg_id <- chadwick_player_lu() |>
-  filter(!is.na(key_fangraphs) & mlb_played_last == 2025) |>
-  select(key_fangraphs) |>
-  distinct()
   
-pitcher_rollup <- function(week_start){
-  week_end = week_start + 6
-  week_stats <- bref_daily_pitcher(week_start, week_end) |>
-    mutate(week = week_start)
-  return(week_stats)
-}
-
 pitcher_gamelogs <- function(fangraph_id){
   game_logs <- fg_pitcher_game_logs(fangraph_id, year = 2025)
   return(game_logs)
@@ -77,8 +48,9 @@ pitcher_gamelogs <- function(fangraph_id){
 
 #need to add UD positions to be able to rank over
 
+
 weekly_pitcher <- future_map_dfr(
-  .x = fg_id$key_fangraphs
+  .x = fg_id$idfangraphs
   ,.f = pitcher_gamelogs
 )
 
@@ -86,7 +58,9 @@ weekly_pitcher_scores <- weekly_pitcher |>
   clean_names() |>
   filter(gs > 0) |>
   select(name = player_name, playerid, date, g, gs, w, so, ip, er) |>
-  separate_wider_delim(cols = ip, delim = ".", names = c('full_innings','partial_innings'),cols_remove =  FALSE) |>
+  #mutate(ip = as.character(ip)) |>
+  separate_wider_delim(cols = ip, delim = ".", names = c('full_innings','partial_innings')
+                       ,cols_remove =  FALSE, too_few = "align_start") |>
   mutate(full_innings = as.numeric(full_innings), partial_innings = as.numeric(partial_innings)) |>
   mutate_if(is.numeric, ~replace(., is.na(.), 0)) |>
   mutate(outs = full_innings*3 + partial_innings) |>
@@ -98,7 +72,7 @@ weekly_pitcher_scores <- weekly_pitcher |>
   summarize(w = sum(w), qs = sum(qs), so = sum(so), outs = sum(outs), er = sum(er), ud_points = sum(ud_points)) |>
   ungroup() |>
   group_by(week) |>
-  mutate(week_rank = rank(-ud_points)) |>
+  mutate(week_rank = rank(-ud_points, ties.method = 'min')) |>
   ungroup() |>
   mutate(rank_group = case_when(week_rank <= 12 ~ 'P1'
                                 , week_rank <= 24 ~ 'P2'
@@ -116,3 +90,27 @@ season_pitcher_scores <- weekly_pitcher_scores |>
   select(name, playerid, P1, P2, P3, Unusable, usable_points) |>
   arrange(desc(usable_points))
 
+#weekly scoring with final adp
+#can adjust to get rid of columns we don't need
+draft_data |>
+  filter(position_name == 'P') |>
+  inner_join(weekly_pitcher_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
+  select(player_name, week, final_adp, w, qs, so, outs, er, ud_points, week_rank, rank_group) |>
+  arrange(desc(ud_points))
+
+#season cumulative scoring with final adp
+#can adjust to get rid of columns we don't need
+draft_data |>
+  filter(position_name == 'P') |>
+  inner_join(season_pitcher_scores, by = c('player_name' = 'name')) |>
+  select(player_name, final_adp, P1, P2, P3, Unusable, usable_points) |>
+  ungroup() |>
+  mutate(season_rank = rank(-usable_points)) |>
+  arrange(desc(usable_points))
+
+#posting ideas
+  #add headshots
+  #can monitor for consistency
+  #individual pitcher pulls
+  #comparison of pitchers picked within a few picks
+  #VORP

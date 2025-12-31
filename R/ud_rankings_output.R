@@ -1,10 +1,17 @@
+if (!requireNamespace('devtools', quietly = TRUE)){
+  install.packages('devtools')
+}
+devtools::install_github(repo = "BillPetti/baseballr")
+
 library(tidyverse)
-library(dplyr)
-library(tidytable)
 library(janitor)
+library(baseballr)
+library(furrr)
 library(stringi)
-library(scales)
+library(gt)
+library(gtExtras)
 library(DT)
+library(scales)
 
 #switch to use position, not just batter rank for hitters
 #display points in final table
@@ -66,6 +73,7 @@ depth_charts_batters <- read_csv(file = 'Inputs/depth_charts_batters.csv') |>
   arrange(desc(ud_points)) |>
   mutate(points = points*depth_charts_multiple) |>
   rename(name = name_ascii)
+  
 
 
 
@@ -124,7 +132,7 @@ proj <- batter_proj |>
   filter(points > 100) |>
   dplyr::inner_join(ud_adp, by = join_by(playername == full_name), relationship = "many-to-many") |>
   rename(position = slot_name) |>
-  group_by(id, name, player_id, team, adp, position, team) |>
+  group_by(id, name, player_id, team, adp, position) |>
   summarize(points = round(max(points))) |>
   ungroup() |>
   group_by(position) |>
@@ -154,25 +162,8 @@ proj <- batter_proj |>
   arrange(vorp) |>
   mutate(vorp = round(rank(-vorp))) |>
   arrange(vorp) |>
-  select(id, name, team, position)
+  select(id, name, team, position) |>
+  filter(!(name == 'Will Smith' & position == 'P') & !(name == 'Luis Garcia') & !(name == 'Luis Garcia Jr.' & position == 'P'))
 
 write_csv(proj, "Outputs/ud_ranks.csv")
 
-proj |>
-  select(-adp) |>
-  DT::datatable(filter = 'top',colnames = c('ADP','Name','Team','Pos','VORP','Value','Value Pct', 'ADP Rank','Points Rank','Points'), options = list(
-    pageLength = 25, 
-    extensions = list(Scroller=list()),
-    initComplete = JS(
-      "function(settings, json) {",
-      "$(this.api().table().header()).css({'background-color': 'black', 'color': 'white'});",
-      "}"),
-    scrollY=200,
-    scrollCollapse = TRUE
-  )) |>
-  formatStyle(
-    'value',
-    backgroundColor = styleEqual(c(1,2,4,5,6), c("#ff5252","#ffbaba","#64b155","#008944","#003b1d"))
-  ) |>
-  formatStyle(c('value','value_pct','adp_rank','points_rank','points'), 'text-align' = 'center') |>
-  formatPercentage(columns = "value_pct", digits = 1)

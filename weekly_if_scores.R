@@ -73,33 +73,34 @@ weekly_batter_scores <- weekly_batter |>
                                 ,.default = 'Unusable')) 
 
 
-season_batter_scores <- weekly_batter_scores |>
-  group_by(name, playerid, rank_group) |>
+
+
+#weekly scoring with final adp
+#can adjust to get rid of columns we don't need
+weekly_if_scoring <- draft_data |>
+  filter(position_name == 'IF') |>
+  inner_join(weekly_batter_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
+  select(player_name, player_id, week, final_adp, , x1b, x2b, x3b, hr, bb, hbp, r, rbi, sb, ud_points) |>
+  arrange(desc(ud_points)) |>
+  group_by(week) |>
+  mutate(week_rank = rank(-ud_points, ties.method = 'min')) |>
+  mutate(rank_group = case_when(week_rank <= 12 ~ 'IF1'
+                                , week_rank <= 24 ~ 'IF2'
+                                , week_rank <= 36 ~ 'IF3'
+                                , week_rank <= 48 ~ 'IF4'
+                                ,.default = 'Unusable')) |>
+  ungroup()
+
+season_if_scoring <- weekly_if_scoring |>
+  group_by(player_name, player_id, rank_group) |>
   summarize(ud_points = sum(ud_points))  |>
   ungroup() |>
   pivot_wider(names_from = rank_group, values_from = ud_points) |>
   mutate_if(is.numeric, ~replace(., is.na(.), 0)) |>
-  mutate(usable_points = H1 + H2 + H3 + H4 + H5 + H6 + H7) |>
-  select(name, playerid, H1, H2, H3, H4, H5, H6, H7, Unusable, usable_points) |>
+  mutate(usable_points = IF1 + IF2 + IF3 + IF4) |>
+  select(player_name, player_id, IF1, IF2, IF3, IF4, Unusable, usable_points) |>
   arrange(desc(usable_points))
 
-#weekly scoring with final adp
-#can adjust to get rid of columns we don't need
-draft_data |>
-  filter(position_name != 'P') |>
-  inner_join(weekly_batter_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
-  select(player_name, week, final_adp, , x1b, x2b, x3b, hr, bb, hbp, r, rbi, sb, ud_points, week_rank, rank_group) |>
-  arrange(desc(ud_points))
-
-#season cumulative scoring with final adp
-#can adjust to get rid of columns we don't need
-draft_data |>
-  filter(position_name != 'P') |>
-  inner_join(season_batter_scores, by = c('player_name' = 'name')) |>
-  select(player_name, final_adp, H1, H2, P3, Unusable, usable_points) |>
-  ungroup() |>
-  mutate(season_rank = rank(-usable_points)) |>
-  arrange(desc(usable_points))
 
 #posting ideas
 #add headshots
