@@ -12,12 +12,12 @@ library(gt)
 library(gtExtras)
 library(DT)
 library(scale)
+library(mlbplotR)
 
-#all previous year stats
 #set up via Github Actions
 #join with mlbplotr
 #save png files to computer
-#see if we can get final adp and my own exposure
+#see if we can get my own exposure
 #try to calculate total points by team YTD and see if we can get advance rates by player
 #VORP by usable scores?
 
@@ -37,7 +37,7 @@ draft_data <- read_csv('https://storage.googleapis.com/underdog-inc/underblog/20
 fg_id <- read_csv('https://www.smartfantasybaseball.com/PLAYERIDMAPCSV') |>
   clean_names() |>
   filter(pos == 'P' & active == 'Y') |>
-  select(idfangraphs)
+  select(idfangraphs, mlbid)
 
 
   
@@ -54,7 +54,7 @@ weekly_pitcher <- future_map_dfr(
   ,.f = pitcher_gamelogs
 )
 
-weekly_pitcher_scores <- weekly_pitcher |>
+pitcher_weekly_scores <- weekly_pitcher |>
   clean_names() |>
   filter(gs > 0) |>
   select(name = player_name, playerid, date, g, gs, w, so, ip, er) |>
@@ -80,7 +80,7 @@ weekly_pitcher_scores <- weekly_pitcher |>
                                 ,.default = 'Unusable')) 
 
 
-season_pitcher_scores <- weekly_pitcher_scores |>
+pitcher_season_scores <- pitcher_weekly_scores |>
   group_by(name, playerid, rank_group) |>
   summarize(ud_points = sum(ud_points))  |>
   ungroup() |>
@@ -92,21 +92,32 @@ season_pitcher_scores <- weekly_pitcher_scores |>
 
 #weekly scoring with final adp
 #can adjust to get rid of columns we don't need
-draft_data |>
+p_weekly_scoring <- draft_data |>
   filter(position_name == 'P') |>
   inner_join(weekly_pitcher_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
-  select(player_name, week, final_adp, w, qs, so, outs, er, ud_points, week_rank, rank_group) |>
-  arrange(desc(ud_points))
-
-#season cumulative scoring with final adp
-#can adjust to get rid of columns we don't need
-draft_data |>
-  filter(position_name == 'P') |>
-  inner_join(season_pitcher_scores, by = c('player_name' = 'name')) |>
-  select(player_name, final_adp, P1, P2, P3, Unusable, usable_points) |>
+  select(player_name, playerid, player_id, week, final_adp, w, qs, so, outs, er, ud_points) |>
+  arrange(desc(ud_points)) |>
+  group_by(week) |>
+  mutate(week_rank = rank(-ud_points, ties.method = 'min')) |>
+  mutate(rank_group = case_when(week_rank <= 12 ~ 'P1'
+                                , week_rank <= 24 ~ 'P2'
+                                , week_rank <= 36 ~ 'P3'
+                                ,.default = 'Unusable')) |>
   ungroup() |>
-  mutate(season_rank = rank(-usable_points)) |>
-  arrange(desc(usable_points))
+  mutate(playerid = as.character(playerid)) |>
+  left_join(fg_id, by = c('playerid' = 'idfangraphs')) |>
+  select(player_name, mlbid, final_adp, week, final_adp, w,qs,outs,so,er, ud_points, week_rank, rank_group)
+
+p_season_scoring <- p_weekly_scoring |>
+  group_by(player_name, mlbid, rank_group, final_adp) |>
+  summarize(ud_points = sum(ud_points))  |>
+  ungroup() |>
+  pivot_wider(names_from = rank_group, values_from = ud_points) |>
+  mutate_if(is.numeric, ~replace(., is.na(.), 0)) |>
+  mutate(usable_points = P1 + P2 + P3) |>
+  select(player_name, mlbid, final_adp, P1, P2, P3, Unusable, usable_points) |>
+  arrange(desc(usable_points)) |>
+  mutate(usable_pct = usable_points/(Unusable + usable_points))
 
 #posting ideas
   #add headshots

@@ -5,6 +5,7 @@ library(furrr)
 library(stringi)
 library(gt)
 library(gtExtras)
+library(mlbplotR)
 
 #all previous year stats
 #set up via Github Actions
@@ -31,7 +32,7 @@ draft_data <- read_csv('https://storage.googleapis.com/underdog-inc/underblog/20
 fg_id <- read_csv('https://www.smartfantasybaseball.com/PLAYERIDMAPCSV') |>
   clean_names() |>
   filter(pos != 'P' & active == 'Y') |>
-  select(idfangraphs)
+  select(idfangraphs, mlbid)
 
 
 
@@ -77,10 +78,10 @@ weekly_batter_scores <- weekly_batter |>
 
 #weekly scoring with final adp
 #can adjust to get rid of columns we don't need
-weekly_if_scoring <- draft_data |>
+if_weekly_scoring <- draft_data |>
   filter(position_name == 'IF') |>
   inner_join(weekly_batter_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
-  select(player_name, player_id, week, final_adp, , x1b, x2b, x3b, hr, bb, hbp, r, rbi, sb, ud_points) |>
+  select(player_name, playerid, player_id, week, final_adp, x1b, x2b, x3b, hr, bb, hbp, r, rbi, sb, ud_points) |>
   arrange(desc(ud_points)) |>
   group_by(week) |>
   mutate(week_rank = rank(-ud_points, ties.method = 'min')) |>
@@ -89,19 +90,28 @@ weekly_if_scoring <- draft_data |>
                                 , week_rank <= 36 ~ 'IF3'
                                 , week_rank <= 48 ~ 'IF4'
                                 ,.default = 'Unusable')) |>
-  ungroup()
+  ungroup() |>
+  mutate(playerid = as.character(playerid)) |>
+  left_join(fg_id, by = c('playerid' = 'idfangraphs')) |>
+  select(player_name, mlbid, final_adp, week, final_adp, x1b, x2b, x3b, hr, bb, hbp, r, rbi, sb, ud_points, week_rank, rank_group)
 
-season_if_scoring <- weekly_if_scoring |>
-  group_by(player_name, player_id, rank_group) |>
+if_season_scoring <- if_weekly_scoring |>
+  group_by(player_name, mlbid, rank_group, final_adp) |>
   summarize(ud_points = sum(ud_points))  |>
   ungroup() |>
   pivot_wider(names_from = rank_group, values_from = ud_points) |>
   mutate_if(is.numeric, ~replace(., is.na(.), 0)) |>
   mutate(usable_points = IF1 + IF2 + IF3 + IF4) |>
-  select(player_name, player_id, IF1, IF2, IF3, IF4, Unusable, usable_points) |>
-  arrange(desc(usable_points))
+  select(player_name, mlbid, final_adp, IF1, IF2, IF3, IF4, Unusable, usable_points) |>
+  arrange(desc(usable_points)) |>
+  mutate(usable_pct = usable_points/(Unusable + usable_points))
 
 
+if_season_scoring |>
+  left_join(fg_id, by = c('playerid' = 'idfangraphs')) |>
+  head(5) |>
+  gt::gt() |>
+  gt_fmt_mlb_headshot(columns = "mlbid")
 #posting ideas
 #add headshots
 #can monitor for consistency
