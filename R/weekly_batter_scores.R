@@ -90,7 +90,7 @@ batter_season_scores <- batter_weekly_scores |>
 #can adjust to get rid of columns we don't need
 batter_weekly_scoring <- draft_data |>
   filter(position_name != 'P') |>
-  inner_join(weekly_batter_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
+  inner_join(batter_weekly_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
   select(player_name, playerid, playerid, player_id, week, final_adp, x1b, x2b, x3b, hr, bb, hbp, r, rbi, sb, ud_points) |>
   arrange(desc(ud_points)) |>
   group_by(week) |>
@@ -138,3 +138,5 @@ data.frame(
   gt::gt() %>%
   gt_fmt_mlb_headshot(columns = "savant_id1") %>%
   gt_fmt_mlb_dot_headshot(columns = "savant_id2")
+
+write_csv(batter_weekly_scoring, "Outputs/batter_weekly_scoring_2025.csv")

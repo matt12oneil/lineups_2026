@@ -11,7 +11,7 @@ library(stringi)
 library(gt)
 library(gtExtras)
 library(DT)
-library(scale)
+library(scales)
 library(mlbplotR)
 
 #set up via Github Actions
@@ -94,7 +94,7 @@ pitcher_season_scores <- pitcher_weekly_scores |>
 #can adjust to get rid of columns we don't need
 p_weekly_scoring <- draft_data |>
   filter(position_name == 'P') |>
-  inner_join(weekly_pitcher_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
+  inner_join(pitcher_weekly_scores, by = c('player_name' = 'name'), relationship = 'many-to-many') |>
   select(player_name, playerid, player_id, week, final_adp, w, qs, so, outs, er, ud_points) |>
   arrange(desc(ud_points)) |>
   group_by(week) |>
@@ -125,3 +125,46 @@ p_season_scoring <- p_weekly_scoring |>
   #individual pitcher pulls
   #comparison of pitchers picked within a few picks
   #VORP
+
+p_season_scoring |>
+  head(10) |>
+  gt() |>
+  gt_fmt_mlb_headshot(columns = "mlbid") |>
+  cols_label(
+    player_name = "Name",
+    mlbid = " ",
+    final_adp = "ADP",
+    usable_points = "Usable Points",
+    usable_pct = "Usable%"
+  ) |>
+  opt_row_striping() |>
+  tab_style(
+    style = cell_borders(sides = "right", color = "black", weight = px(3)),
+    locations = cells_body(
+      columns = c(mlbid)
+    )
+  ) |>
+  tab_style(
+    style = cell_borders(sides = c("top", "bottom"), 
+                         color = "black", weight = px(3)),
+    locations = cells_column_labels(everything())
+  ) %>% 
+  tab_style(
+    style = cell_borders(sides = "bottom", color = "black", weight = px(3)),
+    locations = cells_body(rows = 10)
+  ) |>
+  tab_header(
+    title = "Underdog MLB Scoring: 2024 Pitchers",
+    subtitle = "Usable Points is Anything in Weekly Top 36"
+  ) |>
+  tab_footnote(
+    footnote = "Figure by @solvedbywalking | Data from baseballr package | ADP data from Underdog"
+  ) |>
+  fmt_percent(
+    columns = usable_pct,
+    rows = everything(),
+    decimals = 1
+  ) |>
+  gtsave(filename = "Outputs/TopTenP.png")
+  
+write_csv(p_weekly_scoring, "Outputs/p_weekly_scoring_2025.csv")

@@ -121,3 +121,47 @@ of_season_scoring <- of_weekly_scoring |>
 #individual pitcher pulls
 #comparison of pitchers picked within a few picks
 #VORP
+
+
+of_season_scoring |>
+  head(10) |>
+  gt() |>
+  gt_fmt_mlb_headshot(columns = "mlbid") |>
+  cols_label(
+    player_name = "Name",
+    mlbid = " ",
+    final_adp = "ADP",
+    usable_points = "Usable Points",
+    usable_pct = "Usable%"
+  ) |>
+  opt_row_striping() |>
+  tab_style(
+    style = cell_borders(sides = "right", color = "black", weight = px(3)),
+    locations = cells_body(
+      columns = c(mlbid)
+    )
+  ) |>
+  tab_style(
+    style = cell_borders(sides = c("top", "bottom"), 
+                         color = "black", weight = px(3)),
+    locations = cells_column_labels(everything())
+  ) %>% 
+  tab_style(
+    style = cell_borders(sides = "bottom", color = "black", weight = px(3)),
+    locations = cells_body(rows = 10)
+  ) |>
+  tab_header(
+    title = "Underdog MLB Scoring: 2024 Outfielders",
+    subtitle = "Usable Points is Anything in Weekly Top 48"
+  ) |>
+  tab_footnote(
+    footnote = "Figure by @solvedbywalking | Data from baseballr package | ADP data from Underdog"
+  ) |>
+  fmt_percent(
+    columns = usable_pct,
+    rows = everything(),
+    decimals = 1
+  ) |>
+  gtsave(filename = "Outputs/TopTenOF.png")
+
+write_csv(of_weekly_scoring, "Outputs/of_weekly_scoring_2025.csv")
