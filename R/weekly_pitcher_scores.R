@@ -120,11 +120,11 @@ p_season_scoring <- p_weekly_scoring |>
   mutate(usable_pct = usable_points/(Unusable + usable_points))
 
 #posting ideas
-  #add headshots
-  #can monitor for consistency
-  #individual pitcher pulls
-  #comparison of pitchers picked within a few picks
-  #VORP
+#add headshots
+#can monitor for consistency
+#individual pitcher pulls
+#comparison of pitchers picked within a few picks
+#VORP
 
 p_season_scoring |>
   head(10) |>
@@ -164,6 +164,11 @@ p_season_scoring |>
     columns = usable_pct,
     rows = everything(),
     decimals = 1
+  ) |>
+  tab_options(
+    heading.background.color = '#54796d'
+    , footnotes.background.color = '#54796d'
+    , column_labels.background.color = '#D3D3D3'
   ) |>
   gtsave(filename = "Outputs/TopTenP.png")
   
